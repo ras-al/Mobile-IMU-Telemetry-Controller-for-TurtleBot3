@@ -26,5 +26,3 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
-
-imu_node.py
