@@ -145,19 +145,16 @@ The dashboard visualizes the robot's real-time velocity using **roslib.js** and 
 
 ## Figure 1
 
-**Demonstration Video / GIF**
+**Demonstration Video
 
-> Add your demonstration video or GIF link here.
+https://github.com/user-attachments/assets/d2369d2c-9e12-4c3b-a34d-dc29c94fe7b1
 
----
+**
 
-## Figure 2
 
-**Telemetry Dashboard with Gazebo**
-
-> Add a screenshot showing the Web Dashboard running alongside the Gazebo simulation.
 
 ---
+
 
 # Technologies Used
 
