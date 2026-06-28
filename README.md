@@ -1,99 +1,71 @@
 # Mobile IMU Telemetry Controller for TurtleBot3
 
-Control a TurtleBot3 robot in Gazebo using real-time IMU sensor data streamed from an Android smartphone over UDP.
+This repository contains a **ROS 2 (Humble)** package designed to control a TurtleBot3 in a Gazebo simulation using real-time IMU sensor data streamed over UDP from an Android smartphone.
 
-This project was developed as part of the **CROB Robotics Team – Phase 2 Recruitment Task** under the **Robotics Systems, Simulation & Control Domain**.
-
----
-
-## Overview
-
-The system transforms an Android smartphone into a wireless motion controller for a TurtleBot3 robot. IMU data (Accelerometer, Gyroscope, and Magnetometer) is transmitted via UDP to a ROS 2 node running on Ubuntu. The node processes the incoming sensor values and converts them into velocity commands (`Twist` messages) that drive the robot inside a Gazebo simulation.
+This project was successfully completed as part of the **CROB Robotics Team Phase 2 Recruitment Task (Robotics Systems, Simulation & Control Domain)**. All minimum requirements and bonus objectives were successfully achieved.
 
 ---
 
-## System Architecture
+# System Architecture
 
 ```text
 [Android Smartphone]
-       │
-       │ Raw IMU Data
-       │ (Accel, Gyro, Mag)
-       │ UDP Stream (Port 1212)
-       ▼
-[Ubuntu 22.04 Workstation]
-       │
-       │ ROS 2 Python Node
-       │ Data Parsing & Kinematics
-       ▼
-[ROS 2 Topic: /cmd_vel]
-       │
-       │ Twist Messages
-       ▼
-[Gazebo Simulation]
-       │
-       ▼
-[TurtleBot3 Robot]
+        │
+        │  (Raw IMU Data via UDP Port 1212)
+        ▼
+[Python ROS 2 Node]
+(Parsing, Calibration & Filtering)
+        │
+        ├────────────────────────────────────────────┐
+        │                                            │
+        │ (Twist Message: /cmd_vel)                  │
+        ▼                                            ▼
+[Gazebo Simulation]                         [rosbridge_server]
+                                                     │
+                                                     │ (WebSockets)
+                                                     ▼
+                                          [Web Telemetry Dashboard]
 ```
 
 ---
 
-## Prerequisites
+# Prerequisites
 
-### Operating System
+* **Operating System:** Ubuntu 22.04 LTS
+* **Middleware:** ROS 2 Humble Hawksbill
+* **Simulator:** Gazebo 11 (`ros-humble-gazebo-ros-pkgs`)
+* **Robot Packages:**
 
-* Ubuntu 22.04 LTS
+  * `ros-humble-turtlebot3`
+  * `ros-humble-turtlebot3-gazebo`
+* **Web Bridge:** `ros-humble-rosbridge-suite`
+* **Mobile Application:** VirtualIMU APK (Android)
 
-### ROS Distribution
+---
 
-* ROS 2 Humble Hawksbill
+# Build and Run
 
-### Simulator
+## 1. Network Configuration
 
-* Gazebo 11
+Ensure that your PC and Android phone are connected to the **same Wi-Fi network**.
 
-### Required Packages
+Find your PC's local IP address:
 
 ```bash
-sudo apt install ros-humble-gazebo-ros-pkgs
-sudo apt install ros-humble-turtlebot3
-sudo apt install ros-humble-turtlebot3-gazebo
+ip addr show
 ```
 
-### Mobile Application
-
-* VirtualIMU APK (Android)
-
----
-
-## Project Structure
-
-```text
-mobile_imu_control/
-├── mobile_imu_control/
-│   ├── teleop_node.py
-│   └── __init__.py
-├── package.xml
-├── setup.py
-├── setup.cfg
-└── README.md
-```
-
----
-
-## Installation
-
-### 1. Clone into ROS 2 Workspace
+Allow UDP traffic on port **1212**:
 
 ```bash
-cd ~/crob_ws/src
-
-git clone https://github.com/ras-al/Mobile-IMU-Telemetry-Controller-for-TurtleBot3
+sudo ufw allow 1212/udp
 ```
 
 ---
 
-### 2. Build the Package
+## 2. Build the ROS 2 Workspace
+
+Clone this package into the `src` directory of your ROS 2 workspace, then build it:
 
 ```bash
 cd ~/crob_ws
@@ -105,38 +77,11 @@ source install/setup.bash
 
 ---
 
-## Network Configuration
+## 3. Launch the Complete System
 
-Ensure that:
+Open **three separate terminals**.
 
-* Your Ubuntu workstation and Android phone are connected to the same Wi-Fi network.
-* UDP port **1212** is open.
-
-Allow incoming UDP traffic:
-
-```bash
-sudo ufw allow 1212/udp
-```
-
-Find your workstation IP address:
-
-```bash
-ip addr show
-```
-
-Example:
-
-```text
-192.168.1.101
-```
-
-This IP address must be entered in the VirtualIMU application.
-
----
-
-## Running the System
-
-### Terminal 1 — Launch Gazebo
+### Terminal 1 – Launch Gazebo
 
 ```bash
 export TURTLEBOT3_MODEL=burger
@@ -146,146 +91,84 @@ ros2 launch turtlebot3_gazebo empty_world.launch.py
 
 ---
 
-### Terminal 2 — Launch Telemetry Node
+### Terminal 2 – Launch ROSBridge
 
 ```bash
-source install/setup.bash
+ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+```
+
+---
+
+### Terminal 3 – Launch the IMU Telemetry Node
+
+```bash
+source ~/crob_ws/install/setup.bash
 
 ros2 run mobile_imu_control teleop_node
 ```
 
----
-
-### On Your Android Device
-
-1. Open the VirtualIMU app.
-2. Enter:
-
-   * PC IP Address
-   * Port: `1212`
-3. Press **Start UDP Stream**.
-4. Tilt the phone to control the robot.
+> **Important:** Keep your phone completely flat on the table before pressing **Enter** in Terminal 3. The node performs a **2-second calibration** to determine the resting angle, which is used as the zero reference.
 
 ---
 
-## Control Mapping
+## Web Telemetry Dashboard
 
-| Phone Motion  | Robot Action  |
-| ------------- | ------------- |
-| Tilt Forward  | Move Forward  |
-| Tilt Backward | Move Backward |
-| Tilt Left     | Rotate Left   |
-| Tilt Right    | Rotate Right  |
-| Phone Flat    | Stop          |
+Open the included **`index.html`** file in your web browser to view the live telemetry dashboard.
+
+The dashboard visualizes the robot's real-time velocity using **roslib.js** and **rosbridge_suite**.
 
 ---
 
-## Features
+# Features
 
-### Real-Time UDP Telemetry
-
-* Receives IMU data wirelessly from Android.
-* Low-latency communication using UDP sockets.
-
-### ROS 2 Integration
-
-* Native ROS 2 Python node.
-* Publishes velocity commands directly to `/cmd_vel`.
-
-### TurtleBot3 Simulation
-
-* Fully integrated with Gazebo.
-* No physical robot required.
-
-### Coordinate Frame Correction
-
-Android devices use a different sensor coordinate frame than differential-drive robots.
-
-The node includes:
-
-* Axis remapping
-* Sign correction
-* Velocity scaling
-
-to ensure intuitive control behavior.
+* Real-time UDP communication between an Android smartphone and ROS 2.
+* Motion control of TurtleBot3 using mobile IMU data.
+* Automatic correction for Android sensor axis orientation.
+* Simple Moving Average (SMA) filter for smooth robot motion.
+* Deadzone logic to eliminate jitter while the phone is stationary.
+* Automatic startup calibration to compensate for sensor offset.
+* Live web-based telemetry dashboard using ROSBridge and WebSockets.
 
 ---
 
-## Progress Gallery (video might be lag because of converted to GIF)
+# Bonus Objectives Achieved
 
-![alt text](<src/mobile_imu_control/resource/Screencast from 06-21-2026 12_29_33 PM.gif>)
-
-## Challenges Solved
-
-### 1. Real-Time Mobile-to-ROS Communication
-
-Successfully bridged an external Android device with a ROS 2 environment using UDP networking.
-
-### 2. Sensor Axis Alignment
-
-Android IMU axes differ from standard robot kinematic frames.
-
-Implemented:
-
-* Axis transformation
-* Sign inversion
-* Motion calibration
-
-for accurate robot control.
-
-### 3. Velocity Scaling
-
-Mapped raw sensor values to safe robot velocities suitable for TurtleBot3 operation.
+* Sensor filtering using a Simple Moving Average (SMA).
+* Automatic IMU calibration during startup.
+* Deadzone implementation for stable resting behavior.
+* Live telemetry visualization dashboard.
+* Hardware-to-ROS real-time UDP integration.
 
 ---
 
-## Week 3 Roadmap
+# Demonstration
 
-### 🔹 Sensor Filtering
+## Figure 1
 
-Implement a Simple Moving Average (SMA) filter:
+**Demonstration Video / GIF**
 
-```text
-Raw IMU → SMA Filter → Velocity Mapping
-```
-
-Benefits:
-
-* Reduced jitter
-* Smoother movement
-* Improved control stability
+> Add your demonstration video or GIF link here.
 
 ---
 
-### 🔹 Deadzone Implementation
+## Figure 2
 
-Create a configurable deadzone around neutral phone orientation.
+**Telemetry Dashboard with Gazebo**
 
-Benefits:
-
-* Prevent unintended drift
-* Robot remains stationary when phone is held flat
+> Add a screenshot showing the Web Dashboard running alongside the Gazebo simulation.
 
 ---
 
-## Technologies Used
+# Technologies Used
 
 * ROS 2 Humble
-* Python 3
-* Gazebo 11
+* Python
 * TurtleBot3
+* Gazebo 11
+* ROSBridge Suite
+* WebSockets
+* HTML
+* CSS
+* JavaScript
+* roslib.js
 * UDP Networking
-* Linux (Ubuntu 22.04)
-* Android IMU Sensors
-
----
-
-## Author
-
-**Rasal Musthafa**
-B.Tech Computer Science & Engineering
-TKM College of Engineering, Kollam
-
-Developed for the **CROB Robotics Team Recruitment Task (Phase 2)**.
-
----

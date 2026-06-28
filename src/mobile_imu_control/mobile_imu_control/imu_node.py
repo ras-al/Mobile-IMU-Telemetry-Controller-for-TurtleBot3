@@ -7,30 +7,33 @@ import math
 class MobileImuController(Node):
     def __init__(self):
         super().__init__('mobile_imu_telop')
-
-        #1. Setup publisher for turtlebot3 velocity
         self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
-
-        #2.setup udp socket
+        
         self.udp_ip = "0.0.0.0" 
         self.udp_port = 1212
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((self.udp_ip, self.udp_port))
-
         self.sock.settimeout(0.01)
 
-        self.get_logger().info(f"Listening for UDP telemetry on {self.udp_port}...")
-
-        #3. Create a timer to run the control loop at 20Hz(0.05 s)
         self.timer = self.create_timer(0.05, self.timer_callback)
 
-        #tuning para
         self.k_linear = 0.5
         self.k_angular = 1.0
 
+        # Filter Variables
+        self.pitch_history = []
+        self.roll_history = []
+        self.window_size = 5
+
+        # Calibration Variables
+        self.is_calibrating = True
+        self.calibration_samples = []
+        self.pitch_offset = 0.0
+        self.roll_offset = 0.0
+        self.get_logger().info("Please hold the phone flat and still for 2 seconds...")
+
     def timer_callback(self):
         try:
-            # 1. Drain the socket to get the freshest data packet
             latest_data = None
             while True:
                 try:
@@ -38,32 +41,54 @@ class MobileImuController(Node):
                 except socket.timeout:
                     break
             
-            if latest_data is None:
-                return
+            if latest_data is None: return
             
-            # 2. Decode and Parse
             raw_string = latest_data.decode("utf-8").strip()
             groups = raw_string.split("|")
-            
-            if len(groups) < 3:
-                self.get_logger().warn(f"Incomplete packet received: {raw_string}")
-                return
+            if len(groups) < 3: return
 
             acc = [float(v) for v in groups[0].split(",")]
             ax, ay, az = acc[0], acc[1], acc[2]
 
-            # 3. Kinematics
-            pitch = math.atan2(-ay, az)
-            roll = math.atan2(ax, az)
+            # Raw Kinematics
+            raw_pitch = math.atan2(-ay, az)
+            raw_roll = math.atan2(ax, az)
+
+            # Calibration Routine
+            if self.is_calibrating:
+                self.calibration_samples.append((raw_pitch, raw_roll))
+                # 40 samples at 20Hz = 2 seconds of calibration
+                if len(self.calibration_samples) >= 40:
+                    self.pitch_offset = sum(p for p, r in self.calibration_samples) / 40
+                    self.roll_offset = sum(r for p, r in self.calibration_samples) / 40
+                    self.is_calibrating = False
+                    self.get_logger().info(f"Calibration Complete! (Offsets - Pitch: {self.pitch_offset:.2f}, Roll: {self.roll_offset:.2f})")
+                return
+
+            # Apply Calibration Offsets
+            calibrated_pitch = raw_pitch - self.pitch_offset
+            calibrated_roll = raw_roll - self.roll_offset
+
+            # SMA Filter (using calibrated values)
+            self.pitch_history.append(calibrated_pitch)
+            self.roll_history.append(calibrated_roll)
+
+            if len(self.pitch_history) > self.window_size:
+                self.pitch_history.pop(0)
+                self.roll_history.pop(0)
+
+            smooth_pitch = sum(self.pitch_history) / len(self.pitch_history)
+            smooth_roll = sum(self.roll_history) / len(self.roll_history)
+
+            # Deadzone
+            if abs(smooth_pitch) < 0.1: smooth_pitch = 0.0
+            if abs(smooth_roll) < 0.1: smooth_roll = 0.0
 
             vel_msg = Twist()
-            vel_msg.linear.x = pitch * self.k_linear
-            vel_msg.angular.z = roll * self.k_angular
+            vel_msg.linear.x = smooth_pitch * self.k_linear
+            vel_msg.angular.z = smooth_roll * self.k_angular
 
-            # 4. Publish to ROS
             self.publisher_.publish(vel_msg)
-            
-            # 5. Log the output to terminal for debugging
             self.get_logger().info(f"Published -> Linear: {vel_msg.linear.x:.2f} | Angular: {vel_msg.angular.z:.2f}")
 
         except Exception as e:
@@ -82,4 +107,4 @@ def main(args=None):
         rclpy.shutdown()
 
 if __name__ == '__main__':
-    main() 
+    main()
